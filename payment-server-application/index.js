@@ -3,7 +3,7 @@ const dotenv = require('dotenv');
 const {sequelize} = require('./config/DB');
 const userRouter = require('./router/userRouter');
 // const rechargeRouter = require('./router/rechargeRouter');
-const transactionRouter = require('./router/transactionRouter');
+// const transactionRouter = require('./router/transactionRouter');
 const walletRouter = require('./router/walletRouter');
 const p2pRouter = require('./router/p2pRoute');
 dotenv.config();
@@ -33,7 +33,7 @@ app.use('/api/p2p', p2pRouter);
 
 // app.use('/api', rechargeRouter);
 app.use('/api', walletRouter);
-app.use('/api/transactions', transactionRouter);
+// app.use('/api/transactions', transactionRouter);
 
 
 const port = process.env.PORT;

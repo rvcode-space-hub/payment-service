@@ -4,9 +4,8 @@ module.exports = (sequelize, DataTypes) => {
     {
       service_type: {
         type: DataTypes.INTEGER,
-        allowNull: false,
-        autoIncrement: true,
-        primaryKey: true,
+        autoIncrement: true, 
+        primaryKey: true
       },
       service_name: {
         type: DataTypes.STRING(100),

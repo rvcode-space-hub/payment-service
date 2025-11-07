@@ -2,26 +2,18 @@ const { itn_wallets, its_service_types } = require("../config/DB");
 
 exports.validateBasic = async (payor_wallet, payee_wallet, service_type, amount) => {
   
-  if (!amount || amount <= 0)
-  console.log("Amount Is Invalid");
+  if (!amount || amount <= 0) throw new Error("Amount is invalid");
   
-
   const sourceWallet = await itn_wallets.findByPk(payor_wallet);
-  const destWallet = await itn_wallets.findByPk(payee_wallet);
-
- if(!sourceWallet){
-    console.log("Payor Wallet Not Found");
+  if(!sourceWallet) throw new Error("Payor Wallet not found");
   
- }
- if(!destWallet){
-    console.log("Payee Wallet not Found");
-    
- }
+  const destWallet = await itn_wallets.findByPk(payee_wallet);
+  if(!destWallet) throw new Error("Payee Wallet not found");
 
-
-  const serviceExists = await its_service_types.findByPk(service_type);
-  if (!serviceExists || serviceExists.status !== "active")
-    throw new Error("Service is not active");
+  const service = await its_service_types.findOne({ where: { service_name: service_type  } });
+  if (!service || service.status !== "active") {
+    throw new Error("Invalid service type");
+  }
 
   return { sourceWallet, destWallet };
 };

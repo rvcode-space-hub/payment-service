@@ -1,4 +1,4 @@
-const p2pService = require("../services/p2pService");
+const p2pService = require("../services/P2PService");
 
 exports.sendMoney = async (req, res) => {
   try {

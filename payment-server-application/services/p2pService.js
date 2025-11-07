@@ -14,81 +14,117 @@ exports.transferAmount = async ({
 }) => {
   return await sequelize.transaction(async (t) => {
 
-    // ✅ Step 1: General Validations
-    await validationService.validateBasic(
+    // ✅ Step 1: Validate wallets and service
+    const { sourceWallet, destWallet, serviceId } = await validationService.validateBasic(
       payor_wallet,
       payee_wallet,
       service_type,
       amount
     );
 
-    // ✅ Step 2: Thresholds (Daily / Weekly / Monthly)
+    // ✅ Step 2: Threshold check
     await thresholdService.validateThreshold(payor_wallet, amount);
 
-    // ✅ Step 3: Lock balance (FOR UPDATE prevents race condition)
-    const [payor] = await sequelize.query(
+    // ✅ Step 3: Lock sender wallet
+    const [payorRows] = await sequelize.query(
       `SELECT balance FROM itn_wallets WHERE wallet_id = ? FOR UPDATE`,
       { replacements: [payor_wallet], transaction: t }
     );
-
+    const payor = payorRows[0];
     if (!payor) throw new Error("Sender wallet not found");
 
-    // ✅ Step 4: Charge + Commission Calculation
+    // ✅ Step 4: Calculate charges and commission
     const charge = chargeService.calculateCharge(amount);
     const commission = commissionService.applyCommission(amount);
     const totalDebit = amount + charge;
 
-    if (payor.balance < totalDebit)
-      throw new Error("Insufficient wallet balance");
+    if (payor.balance < totalDebit) throw new Error("Insufficient wallet balance");
 
-    // ✅ Step 5: Deduct balance from sender
+    // --- Balances for sender
+    const senderPrev = payor.balance;
+    const senderNew = senderPrev - totalDebit;
+
+    // ✅ Step 5: Deduct sender balance & update prev_balance
     await sequelize.query(
-      `UPDATE itn_wallets SET balance = balance - ? WHERE wallet_id = ?`,
-      { replacements: [totalDebit, payor_wallet], transaction: t }
+      `UPDATE itn_wallets 
+       SET prev_balance = ?, balance = ? 
+       WHERE wallet_id = ?`,
+      { replacements: [senderPrev, senderNew, payor_wallet], transaction: t }
     );
 
-    // ✅ Step 6: Add balance to receiver
+    // ✅ Step 6: Lock receiver wallet
+    const [receiverRows] = await sequelize.query(
+      `SELECT balance FROM itn_wallets WHERE wallet_id = ? FOR UPDATE`,
+      { replacements: [payee_wallet], transaction: t }
+    );
+    const receiver = receiverRows[0];
+    if (!receiver) throw new Error("Receiver wallet not found");
+
+    // --- Balances for receiver
+    const receiverPrev = receiver.balance;
+    const receiverNew = receiverPrev + amount + commission;
+
+    // ✅ Step 7: Credit receiver & update prev_balance
     await sequelize.query(
-      `UPDATE itn_wallets SET balance = balance + ? WHERE wallet_id = ?`,
-      { replacements: [amount + commission, payee_wallet], transaction: t }
+      `UPDATE itn_wallets 
+       SET prev_balance = ?, balance = ? 
+       WHERE wallet_id = ?`,
+      { replacements: [receiverPrev, receiverNew, payee_wallet], transaction: t }
     );
 
-    // ✅ Step 7: Create DB Transaction logs (DEBIT + CREDIT)
+    // ✅ Step 8: Log transactions (Debit & Credit)
+    await itn_transactions.create({
+      transaction_id: uuidv4(),
+      payor_wallet,
+      payee_wallet,
+      user_id,
+      service_type: serviceId,
+      amount: totalDebit,
+      type: "DEBIT",
+      status: "SUCCESS",
+      created_at: new Date(),
+    }, { transaction: t });
 
-    await itn_transactions.create(
-      {
-        transaction_id: uuidv4(),
-        payor_wallet,
-        payee_wallet,
-        user_id,
-        service_type,
-        amount: totalDebit,
-        type: "DEBIT",
-        status: "SUCCESS",
-      },
-      { transaction: t }
-    );
+    await itn_transactions.create({
+      transaction_id: uuidv4(),
+      payor_wallet,
+      payee_wallet,
+      user_id,
+      service_type: serviceId,
+      amount: amount + commission,
+      type: "CREDIT",
+      status: "SUCCESS",
+      created_at: new Date(),
+    }, { transaction: t });
 
-    await itn_transactions.create(
-      {
-        transaction_id: uuidv4(),
-        payor_wallet,
-        payee_wallet,
-        user_id,
-        service_type,
-        amount: amount + commission,
-        type: "CREDIT",
-        status: "SUCCESS",
-      },
-      { transaction: t }
-    );
+    // ✅ Step 9: Success message
+    let message;
+    switch (service_type) {
+      case "Recharge":
+      case "Jio Recharge":
+        message = `${service_type} successful `;
+        break;
+      case "Rent Payment":
+        message = `Rent payment successful `;
+        break;
+      case "P2P Transfer":
+        message = `P2P Transfer successful `;
+        break;
+      default:
+        message = `Transaction successful `;
+    }
 
+    // ✅ Step 10: Return summary
     return {
       success: true,
-      message: "P2P Transfer Successful ✅",
+      message,
       transfer_amount: amount,
       service_charge: charge,
       commission_received: commission,
+      sender_prev_balance: senderPrev,
+      sender_new_balance: senderNew,
+      receiver_prev_balance: receiverPrev,
+      receiver_new_balance: receiverNew
     };
   });
 };

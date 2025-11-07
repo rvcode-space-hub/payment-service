@@ -1,60 +1,56 @@
 const { itn_transactions } = require("../config/DB");
 const { Op } = require("sequelize");
 
-exports.validateThreshold = async (wallet_id, amount) => {
+exports.validateThreshold = async (payor_wallet, amount) => {
   const today = new Date();
   const startOfDay = new Date(today.setHours(0, 0, 0, 0));
-
-  const dailyAmount = await itn_transactions.sum("amount", {
-    where: {
-      wallet_id,
-      created_at: { [Op.gte]: startOfDay },
-    },
-  });
 
   const DAILY_LIMIT = 2000;
   const WEEKLY_LIMIT = 10000;
   const MONTHLY_LIMIT = 5000;
   const ANNUAL_LIMIT = 20000;
 
+  // Daily
+  const dailyAmount = await itn_transactions.sum("amount", {
+    where: {
+      payor_wallet,
+      created_at: { [Op.gte]: startOfDay },
+    },
+  });
   if ((dailyAmount || 0) + amount > DAILY_LIMIT)
-    console.log("Daily limit exceeded!");
+    throw new Error("Daily limit exceeded!");
 
+  // Weekly
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setDate(today.getDate() - 7);
   const weeklyAmount = await itn_transactions.sum("amount", {
     where: {
-      wallet_id,
-      created_at: {
-        [Op.gte]: new Date(new Date() - 7 * 24 * 60 * 60 * 1000),
-      },
+      payor_wallet,
+      created_at: { [Op.gte]: sevenDaysAgo },
     },
   });
-  
   if ((weeklyAmount || 0) + amount > WEEKLY_LIMIT)
-  console.log("Weekly limit exceeded!");
+    throw new Error("Weekly limit exceeded!");
 
+  // Monthly
   const monthlyAmount = await itn_transactions.sum("amount", {
     where: {
-      wallet_id,
-      created_at: {
-        [Op.gte]: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
-      },
+      payor_wallet,
+      created_at: { [Op.gte]: new Date(today.getFullYear(), today.getMonth(), 1) },
     },
   });
+  if ((monthlyAmount || 0) + amount > MONTHLY_LIMIT)
+    throw new Error("Monthly limit exceeded!");
 
-    if ((monthlyAmount || 0) + amount > MONTHLY_LIMIT)
-      console.log("Monthly limit exceeded!");
-    const annualAmount = await itn_transactions.sum("amount", {
+  // Annual
+  const annualAmount = await itn_transactions.sum("amount", {
     where: {
-        wallet_id,
-        created_at: {
-        [Op.gte]: new Date(new Date().getFullYear(), 0, 1),
-        },
+      payor_wallet,
+      created_at: { [Op.gte]: new Date(today.getFullYear(), 0, 1) },
     },
-    });
-    
-    if ((annualAmount || 0) + amount > ANNUAL_LIMIT)
-      console.log("Annual limit exceeded!");
-
+  });
+  if ((annualAmount || 0) + amount > ANNUAL_LIMIT)
+    throw new Error("Annual limit exceeded!");
 
   return true;
 };
