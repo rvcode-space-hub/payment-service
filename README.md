@@ -29,13 +29,6 @@ It supports **secure fund transfers**, **charges**, **commissions**, and **trans
 
 ---
 
-## ⚙️ Installation & Setup
-
-### 1️⃣ Clone Repository
-```bash
-git clone https://github.com/your-username/wallet-transaction-engine.git
-cd wallet-transaction-engine
-
 ## 🔐 Transaction Flow
 
 **Validate sender & receiver wallets**
@@ -57,4 +50,15 @@ cd wallet-transaction-engine
 
 📜 License
 Licensed under the MIT License — free for commercial or personal use.
+
+----
+
+## ⚙️ Installation & Setup
+
+### 1️⃣ Clone Repository
+```bash
+git clone https://github.com/your-username/wallet-transaction-engine.git
+cd wallet-transaction-engine
+
+
 
